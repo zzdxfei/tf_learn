@@ -4,6 +4,7 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.python import keras
+import os
 
 
 BATCH_SIZE = 32
@@ -99,13 +100,18 @@ def train_net():
     init_op = tf.global_variables_initializer()
 
     NUM_EPOCHS = 10
+    
+    saver = tf.train.Saver()
+    save_dir = './saved_models'
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
     with tf.Session() as sess:
         writer = tf.summary.FileWriter('./logs', sess.graph)
         sess.run(init_op)
 
         for e in range(NUM_EPOCHS):
-            print('{0} epoch -> {1} {0}'.format('=' * 10, e))
+            print('\n\n{0} epoch -> {1} {0}'.format('=' * 10, e))
             running_loss = 0.0
             for i in range(len(x_train) / BATCH_SIZE):
                 batch_x_train = x_train[i * BATCH_SIZE: (i + 1) * BATCH_SIZE]
@@ -130,8 +136,11 @@ def train_net():
                     net_input: batch_x_test, net_truth: batch_y_test})
                 running_accuracy += batch_accuracy * BATCH_SIZE
             running_accuracy /= (len(x_test) / BATCH_SIZE * BATCH_SIZE)
-
             print(">>>>>> test accuracy -> {} <<<<<<<".format(running_accuracy))
+
+            # save checkpoint
+            saver.save(sess, os.path.join(save_dir, 'weights.ckpt'), global_step=e)
+            print(">>>>>> MODEL SAVED <<<<<<<")
 
 
 if __name__ == "__main__":
