@@ -24,6 +24,7 @@ def get_model_bone(input_tensor):
     HIDDEN_UNITS = 512
     with tf.variable_scope('preprocess'):
         input_tensor = input_tensor / 256.0
+        tf.summary.image('input', input_tensor)
 
     with tf.variable_scope('conv1'):
         w = tf.Variable(tf.truncated_normal(
@@ -31,6 +32,8 @@ def get_model_bone(input_tensor):
         b = tf.Variable(tf.zeros((32,), dtype=tf.float32))
         conv1 = tf.nn.conv2d(input_tensor, w, [1, 1, 1, 1], 'SAME')
         conv1 = tf.nn.relu(tf.nn.bias_add(conv1, b))
+        for i in range(32):
+            tf.summary.image('conv1_' + str(i), conv1[:, :, :, i: i+1])
 
     with tf.variable_scope('pooling1'):
         pool1 = tf.nn.max_pool(conv1, (1, 2, 2, 1), (1, 2, 2, 1), 'SAME')
@@ -41,6 +44,8 @@ def get_model_bone(input_tensor):
         b = tf.Variable(tf.zeros((64,), dtype=tf.float32))
         conv2 = tf.nn.conv2d(pool1, w, [1, 1, 1, 1], 'SAME')
         conv2 = tf.nn.relu(tf.nn.bias_add(conv2, b))
+        for i in range(64):
+            tf.summary.image('conv2_' + str(i), conv2[:, :, :, i: i+1])
 
     with tf.variable_scope('pooling2'):
         pool2 = tf.nn.max_pool(conv2, (1, 2, 2, 1), (1, 2, 2, 1), 'SAME')
@@ -54,12 +59,16 @@ def get_model_bone(input_tensor):
             [flatten_shape[1], HIDDEN_UNITS], stddev=0.1, dtype=tf.float32))
         b = tf.Variable(tf.zeros((HIDDEN_UNITS,), dtype=tf.float32))
         dense1 = tf.nn.relu(tf.matmul(flatten, w) + b)
+        tf.summary.histogram('dense1_w', w)
+        tf.summary.histogram('dense1_b', b)
 
     with tf.variable_scope('dense2'):
         w = tf.Variable(tf.truncated_normal(
             [HIDDEN_UNITS, HIDDEN_UNITS / 2], stddev=0.1, dtype=tf.float32))
         b = tf.Variable(tf.zeros((HIDDEN_UNITS / 2,), dtype=tf.float32))
         dense2 = tf.nn.relu(tf.matmul(dense1, w) + b)
+        tf.summary.histogram('dense2_w', w)
+        tf.summary.histogram('dense2_b', b)
 
     with tf.variable_scope('output'):
         w = tf.Variable(tf.truncated_normal(
@@ -84,6 +93,7 @@ def train_net():
         loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=net_output, labels=net_truth)
         loss = tf.reduce_mean(loss)
+        tf.summary.scalar('loss', loss)
 
     with tf.variable_scope('optimizer'):
         optimizer = tf.train.AdamOptimizer(0.001).minimize(loss)
@@ -99,6 +109,9 @@ def train_net():
 
     init_op = tf.global_variables_initializer()
 
+    # summary
+    summaryer = tf.summary.merge_all()
+
     NUM_EPOCHS = 10
     
     saver = tf.train.Saver()
@@ -110,13 +123,15 @@ def train_net():
         writer = tf.summary.FileWriter('./logs', sess.graph)
         sess.run(init_op)
 
+        global_step = 0
         for e in range(NUM_EPOCHS):
             print('\n\n{0} epoch -> {1} {0}'.format('=' * 10, e))
             running_loss = 0.0
             for i in range(len(x_train) / BATCH_SIZE):
                 batch_x_train = x_train[i * BATCH_SIZE: (i + 1) * BATCH_SIZE]
                 batch_y_train = y_train[i * BATCH_SIZE: (i + 1) * BATCH_SIZE]
-                _, train_loss = sess.run([optimizer, loss], feed_dict={
+                batch_summary, _, train_loss = sess.run(
+                    [summaryer, optimizer, loss], feed_dict={
                     net_input: batch_x_train, net_truth: batch_y_train})
                 if i == 0:
                     running_loss = train_loss
@@ -126,6 +141,8 @@ def train_net():
                 if (i + 1) % 100 == 0:
                     print('step -> {} : running loss -> {}'.format(
                         i, running_loss))
+                writer.add_summary(batch_summary, global_step=global_step)
+                global_step += 1
 
             # 测试
             running_accuracy = 0.0
