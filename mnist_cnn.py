@@ -32,8 +32,6 @@ def get_model_bone(input_tensor):
         b = tf.Variable(tf.zeros((32,), dtype=tf.float32))
         conv1 = tf.nn.conv2d(input_tensor, w, [1, 1, 1, 1], 'SAME')
         conv1 = tf.nn.relu(tf.nn.bias_add(conv1, b))
-        for i in range(32):
-            tf.summary.image('conv1_' + str(i), conv1[:, :, :, i: i+1])
 
     with tf.variable_scope('pooling1'):
         pool1 = tf.nn.max_pool(conv1, (1, 2, 2, 1), (1, 2, 2, 1), 'SAME')
@@ -44,8 +42,20 @@ def get_model_bone(input_tensor):
         b = tf.Variable(tf.zeros((64,), dtype=tf.float32))
         conv2 = tf.nn.conv2d(pool1, w, [1, 1, 1, 1], 'SAME')
         conv2 = tf.nn.relu(tf.nn.bias_add(conv2, b))
+
+        padding_shape = tf.constant([2, 2, 2, 2], shape=(2, 2), dtype=tf.int64)
+
+        vis_w = tf.concat([tf.concat(
+            [tf.pad(w[:, :, j, i], padding_shape) 
+                for i in range(64)], axis=1) for j in range(32)], axis=0)
+        vis_w_shape = vis_w.get_shape().as_list()
+        vis_w = tf.reshape(vis_w, [1, vis_w_shape[0], vis_w_shape[1], 1])
+        tf.summary.image('conv1_w', vis_w)
+
+        """
         for i in range(64):
             tf.summary.image('conv2_' + str(i), conv2[:, :, :, i: i+1])
+        """
 
     with tf.variable_scope('pooling2'):
         pool2 = tf.nn.max_pool(conv2, (1, 2, 2, 1), (1, 2, 2, 1), 'SAME')
