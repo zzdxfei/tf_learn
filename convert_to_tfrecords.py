@@ -9,7 +9,7 @@ import numpy as np
 IMAGE_W = 4
 IMAGE_H = 4
 IMAGE_D = 3
-NUM_SAMPLES = 500
+NUM_SAMPLES = 5
 
 
 def make_dataset():
@@ -27,16 +27,23 @@ def convert_to_tfrecords(dataset, savename):
     def _int64_feature(value):
         return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
+    def _float_feature(value):
+        return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
     def _bytes_feature(value):
         return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
     images, labels = dataset
     with tf.python_io.TFRecordWriter(savename) as writer:
         for i in range(NUM_SAMPLES):
+            annotions = np.ones((4 * i, ), dtype=np.float32) * i
+            annotions = annotions.tolist()
+            # print(annotions)
             image_raw = images[i].tostring()
             example = tf.train.Example(
                 features=tf.train.Features(
                     feature={
+                        'annotions': _float_feature(annotions),
                         'height': _int64_feature(IMAGE_H),
                         'width': _int64_feature(IMAGE_W),
                         'depth': _int64_feature(IMAGE_D),
@@ -52,6 +59,7 @@ def parse_tfrecords(filename):
         features = tf.parse_single_example(
             example,
             features={
+                'annotions': tf.VarLenFeature(tf.float32),
                 'image_raw': tf.FixedLenFeature([], tf.string),
                 'label': tf.FixedLenFeature([], tf.int64),
                 'height': tf.FixedLenFeature([], tf.int64),
@@ -62,13 +70,16 @@ def parse_tfrecords(filename):
         label = tf.cast(features['label'], tf.int32)
         height = features['height']
         width = features['width']
-        return (image, height, width, label)
+        annotions = features['annotions']
+        annotions = tf.sparse_tensor_to_dense(annotions)
+        annotions = tf.zeros((16,), dtype=tf.float32)
+        return (image, height, width, label, annotions)
 
     with tf.name_scope('input'):
         dataset = tf.data.TFRecordDataset(filename)
         dataset = dataset.map(_decode)
-        dataset = dataset.batch(100)
-        dataset = dataset.repeat(20)
+        dataset = dataset.batch(2)
+        # dataset = dataset.repeat(20)
         iterator = dataset.make_one_shot_iterator()
         batch_data = iterator.get_next()
 
@@ -76,7 +87,7 @@ def parse_tfrecords(filename):
         try:
             while True:
                 batch_train_data = sess.run(batch_data)
-                print(batch_train_data[0].shape, batch_train_data[3].shape)
+                print(batch_train_data[4])
         except tf.errors.OutOfRangeError:
             print('{0} load finished {0}'.format('~' * 15))
 
